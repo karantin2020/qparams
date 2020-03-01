@@ -210,7 +210,7 @@ func TestParseSliceCustomSeparator(t *testing.T) {
 
 		{
 			URL:            "foobar.com?Embed=",
-			ExpectedResult: testStruct{},
+			ExpectedResult: testStruct{Embed: Slice{}},
 			ExpectedError:  nil,
 		},
 	}
@@ -271,7 +271,7 @@ func TestParseMap(t *testing.T) {
 
 		{
 			URL:            "foobar.com?filter=",
-			ExpectedResult: testStruct{},
+			ExpectedResult: testStruct{Filter: Map{}},
 			ExpectedError:  nil,
 		},
 	}
@@ -442,6 +442,12 @@ func TestParseFloat64(t *testing.T) {
 		},
 
 		{
+			URL:            "foobar.com?ratio=-100_876",
+			ExpectedResult: testStruct{Ratio: -100876},
+			ExpectedError:  nil,
+		},
+
+		{
 			URL:            "foobar.com?ratio=17.92345",
 			ExpectedResult: testStruct{Ratio: 17.92345},
 			ExpectedError:  nil,
@@ -479,9 +485,9 @@ func TestParseFloatErrors(t *testing.T) {
 		},
 
 		{
-			URL:            "foobar.com?ratio=100_8",
+			URL:            "foobar.com?ratio=100-8",
 			ExpectedResult: testStruct{Ratio: 0},
-			ExpectedError:  TypeConvErrors{"Field Ratio does not contain a valid float (100_8)"},
+			ExpectedError:  TypeConvErrors{"Field Ratio does not contain a valid float (100-8)"},
 		},
 	}
 
@@ -677,5 +683,52 @@ func TestFloatSliceConvert(t *testing.T) {
 		newSlice, err := opts.IDs.ToFloatSlice()
 
 		compareFloatSlices(t, c.ExpectedFloatSliceResult, newSlice, err, c.ExpectedConvErr)
+	}
+}
+
+func TestComplexStruct(t *testing.T) {
+	type testStruct struct {
+		// Filter qparams Map (map[string]string)
+		// with defined operations (required)
+		Filter Map `qparams:"ops:>=,==,!=,@>,?,~"`
+
+		// Embed qparams Slice ([]string)
+		Embed Slice
+
+		// Fort field
+		Fort []string
+
+		// qparams Slice ([]string)
+		// with custom separator
+		Flags Slice `qparams:"sep:|"`
+
+		// field with custom query param name (lowercase is the default)
+		// tags can be combined eg. `qparams:"name:foo sep:| ops:==,<>"`
+		FooBar string `qparams:"name:foo-bar"`
+
+		// Regular primitive values
+		Limit int64
+		Page  int64
+		Baz   float64
+		ZMap  map[string]interface{}
+	}
+
+	table := []testCase{
+		{
+			URL:            "https://foo.bar.baz?baz=&limit=100&page=2&foo-bar=asd&embed=order,invoice,discount&filter=amount>=1000&filter=currency?EUR,order_number~53,&flags=a|b|c&flags=d|e|f&fort=s,d,f",
+			ExpectedResult: testStruct{Filter: Map{"amount >=": "1000", "currency ?": "EUR", "order_number ~": "53"}, Embed: Slice{"order", "invoice", "discount"}, Flags: Slice{"a", "b", "c", "d", "e", "f"}, Fort: []string{"s", "d", "f"}, FooBar: "asd", Limit: 100, Page: 2, Baz: 0},
+			ExpectedError:  nil,
+		},
+	}
+
+	t.Log("")
+	t.Log("Testing conversion of slice to float slice")
+
+	for _, c := range table {
+		opts := testStruct{}
+		r := newRequest(c.URL)
+		err := Parse(&opts, r)
+
+		compare(t, c, opts, err)
 	}
 }
